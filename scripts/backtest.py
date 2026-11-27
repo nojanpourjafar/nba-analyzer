@@ -1,7 +1,8 @@
 """Run the Elo model over data/games.csv and report how good its probabilities are.
 
-Usage:  python scripts/backtest.py [--burn-in 1]
+Usage:  python scripts/backtest.py [--burn-in 1] [--odds data/odds.csv]
 The first --burn-in seasons are used only to warm up ratings and are left out of the scores.
+With --odds, the model is also scored against the market on the games that have a price.
 """
 
 import argparse
@@ -9,7 +10,8 @@ import argparse
 import pandas as pd
 
 from nba_analyzer.elo import EloModel, run_elo
-from nba_analyzer.evaluate import calibration_table, summarize
+from nba_analyzer.evaluate import calibration_table, compare_to_market, summarize
+from nba_analyzer.market import attach_market, load_odds
 
 
 def main() -> None:
@@ -19,6 +21,7 @@ def main() -> None:
     ap.add_argument("--k", type=float, default=20.0)
     ap.add_argument("--home-adv", type=float, default=100.0)
     ap.add_argument("--carryover", type=float, default=0.75)
+    ap.add_argument("--odds", help="odds CSV (date, home, away, home_ml, away_ml) to compare against")
     ap.add_argument("--out", default="data/predictions.csv")
     args = ap.parse_args()
 
@@ -29,6 +32,8 @@ def main() -> None:
 
     model = EloModel(k=args.k, home_adv=args.home_adv, carryover=args.carryover)
     results, model = run_elo(games, model)
+    if args.odds:
+        results = attach_market(results, load_odds(args.odds))
     results.to_csv(args.out, index=False)
 
     scored = results[results["season"].isin(seasons[args.burn_in :])]
@@ -38,6 +43,11 @@ def main() -> None:
         print(f"  {name:<18} {value:.4f}" if isinstance(value, float) else f"  {name:<18} {value}")
     print("\nCalibration (predicted vs actual home-win rate):")
     print(calibration_table(scored["p_home"].to_numpy(), scored["home_win"].to_numpy()).to_string())
+    if args.odds:
+        priced = int(scored["p_market"].notna().sum())
+        print(f"\nModel vs market ({priced} of {len(scored)} scored games have odds):")
+        if priced:
+            print(compare_to_market(scored).to_string(float_format="%.4f"))
     print("\nTop 5 current ratings:")
     for team, r in sorted(model.ratings.items(), key=lambda kv: -kv[1])[:5]:
         print(f"  {team}  {r:.0f}")

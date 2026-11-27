@@ -20,7 +20,12 @@ ruff check . && ruff format --check .
 python scripts/fetch.py --start 2015 --end 2024   # pulls 2015-16 .. 2024-25 into data/games.csv
 python scripts/tune.py --burn-in 1 --test 2       # pick k / home_adv / carryover on early seasons
 python scripts/backtest.py --burn-in 1            # Elo backtest + calibration table
+python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on games with odds
 ```
+
+The odds file needs the columns `date, home, away, home_ml, away_ml`. The last two are American
+moneyline odds, and team abbreviations must match `data/games.csv`. The market's probabilities have
+the bookmaker's margin removed before they're scored.
 
 No network? `python scripts/tune.py --simulate` runs the whole tuning loop on simulated seasons.
 
