@@ -23,6 +23,7 @@ python scripts/backtest.py --burn-in 1            # Elo backtest + calibration t
 python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on games with odds
 python scripts/backtest.py --home-k 0.5           # learn home advantage as seasons go (0 = fixed)
 python scripts/backtest.py --b2b-penalty 30       # teams on a back-to-back count as 30 Elo weaker
+python scripts/backtest.py --travel-penalty 20    # ... and 20 Elo weaker per 1,000 extra miles flown
 ```
 
 The odds file needs the columns `date, home, away, home_ml, away_ml`. The last two are American
@@ -49,7 +50,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 | File | Purpose |
 |---|---|
 | `nba_analyzer/data.py` | Fetch seasons, collapse two team rows into one row per game |
-| `nba_analyzer/elo.py` | Elo model: home-court advantage (fixed or learned), back-to-back penalty, margin-of-victory multiplier, season regression |
+| `nba_analyzer/elo.py` | Elo model: home-court advantage (fixed or learned), back-to-back and travel penalties, margin-of-victory multiplier, season regression |
 | `nba_analyzer/evaluate.py` | Accuracy, Brier score, log loss, calibration table vs a naive baseline |
 | `nba_analyzer/features.py` | Pre-game features: rest days, back-to-backs and travel miles for each team |
 | `nba_analyzer/market.py` | Betting odds to probabilities, with the bookmaker margin removed |
@@ -69,7 +70,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 
 1. ~~Game results + Elo baseline~~
 2. ~~Tune `k` and `home_adv` on early seasons, test on later ones~~
-3. Add features: ~~rest days / back-to-backs~~, travel, injuries
+3. Add features: ~~rest days / back-to-backs~~, ~~travel~~, injuries
 4. Logistic regression / gradient boosting on Elo + features
 5. Pull historical market prices and compare model vs market (paper trading only)
 6. Dashboard

@@ -143,3 +143,18 @@ def test_elo_with_b2b_penalty_beats_ignoring_fatigue():
     aware, _ = run_elo(games, EloModel(home_adv=80, b2b_penalty=80))
     later = plain["season"] != "2015-16"
     assert summarize(aware[later & tired])["log_loss"] < summarize(plain[later & tired])["log_loss"]
+
+
+def test_travel_penalty_lowers_the_chances_of_the_team_that_flew_further():
+    m = EloModel(travel_penalty=20)
+    assert m.win_prob("A", "B", home_travel=0, away_travel=2500) > m.win_prob("A", "B")
+    assert m.win_prob("A", "B", home_travel=2500, away_travel=0) < m.win_prob("A", "B")
+    assert EloModel().win_prob("A", "B", home_travel=2500) == EloModel().win_prob("A", "B")
+
+
+def test_elo_with_travel_penalty_beats_ignoring_travel():
+    games = simulate_seasons(seasons=4, travel_penalty=3, seed=8)  # 3 points per 1,000 miles
+    plain, _ = run_elo(games, EloModel(home_adv=80))
+    aware, _ = run_elo(games, EloModel(home_adv=80, travel_penalty=80))
+    later = plain["season"] != "2015-16"
+    assert summarize(aware[later])["log_loss"] < summarize(plain[later])["log_loss"]

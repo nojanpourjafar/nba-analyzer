@@ -26,9 +26,12 @@ def main() -> None:
 
     if args.simulate:
         # Home edge drifts down, collapses for a fan-less season, then partly recovers;
-        # teams on a back-to-back play 2 points worse.
+        # teams on a back-to-back play 2 points worse, and 1 point worse per 1,000 miles flown.
         games = simulate_seasons(
-            seasons=8, home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2], b2b_penalty=2.0
+            seasons=8,
+            home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2],
+            b2b_penalty=2.0,
+            travel_penalty=1.0,
         )
     else:
         games = pd.read_csv(args.games, parse_dates=["date"], dtype={"game_id": str})

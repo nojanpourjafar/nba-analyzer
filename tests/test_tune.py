@@ -49,3 +49,11 @@ def test_tune_finds_a_back_to_back_penalty():
     res = tune(games, grid=grid, burn_in=1, test=1)
     assert res.best["b2b_penalty"] == 80
     assert res.test_score(res.best) < res.test_score({**res.best, "b2b_penalty": 0})
+
+
+def test_tune_finds_a_travel_penalty():
+    games = simulate_seasons(seasons=5, travel_penalty=3, seed=9)
+    grid = {"k": [20], "home_adv": [80], "carryover": [0.75], "travel_penalty": [0, 80]}
+    res = tune(games, grid=grid, burn_in=1, test=1)
+    assert res.best["travel_penalty"] == 80
+    assert res.test_score(res.best) < res.test_score({**res.best, "travel_penalty": 0})

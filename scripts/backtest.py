@@ -23,6 +23,7 @@ def main() -> None:
     ap.add_argument("--carryover", type=float, default=0.75)
     ap.add_argument("--home-k", type=float, default=0.0, help="learn home advantage at this rate (0 = fixed)")
     ap.add_argument("--b2b-penalty", type=float, default=0.0, help="Elo points off on a back-to-back")
+    ap.add_argument("--travel-penalty", type=float, default=0.0, help="Elo points per 1,000 extra miles")
     ap.add_argument("--odds", help="odds CSV (date, home, away, home_ml, away_ml) to compare against")
     ap.add_argument("--out", default="data/predictions.csv")
     args = ap.parse_args()
@@ -38,6 +39,7 @@ def main() -> None:
         carryover=args.carryover,
         home_k=args.home_k,
         b2b_penalty=args.b2b_penalty,
+        travel_penalty=args.travel_penalty,
     )
     results, model = run_elo(games, model)
     if args.odds:
