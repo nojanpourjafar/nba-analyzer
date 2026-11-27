@@ -97,3 +97,24 @@ def test_fetch_with_retry_gives_up(monkeypatch):
 
     with pytest.raises(RuntimeError, match="after 3 attempts"):
         fetch_with_retry("2023-24", retries=2, fetch=broken)
+
+
+def test_home_k_zero_keeps_home_advantage_fixed():
+    m = EloModel()
+    m.update("A", "B", 90, 110)
+    assert m.home_adv == 100.0
+
+
+def test_learned_home_advantage_tracks_a_vanishing_home_edge():
+    # Two normal seasons, then two "bubble" seasons with no home edge at all.
+    games = simulate_seasons(seasons=4, home_edge=[3, 3, 0, 0], seed=2)
+    fixed, _ = run_elo(games, EloModel(home_adv=80))
+    learned, model = run_elo(games, EloModel(home_adv=80, home_k=0.5))
+    assert model.home_adv < 40  # it noticed home teams stopped over-performing
+    bubble = fixed["season"].isin(["2017-18", "2018-19"])
+    assert summarize(learned[bubble])["log_loss"] < summarize(fixed[bubble])["log_loss"]
+
+
+def test_simulate_needs_one_home_edge_per_season():
+    with pytest.raises(ValueError):
+        simulate_seasons(seasons=3, home_edge=[3, 0])

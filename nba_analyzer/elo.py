@@ -4,6 +4,8 @@
 - Margin-of-victory multiplier, damped for heavy favourites so blowouts by strong teams
   don't inflate ratings.
 - Between seasons, ratings regress partway back to the league mean.
+- Optionally (home_k > 0), home-court advantage is learned as games are played, so it can
+  follow league-wide shifts such as the 2020 bubble or the long-run decline in home edge.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ class EloModel:
     home_adv: float = 100.0
     mean: float = 1505.0
     carryover: float = 0.75  # fraction of a rating kept going into a new season
+    home_k: float = 0.0  # learning rate for home_adv; 0 keeps it fixed
     ratings: dict[str, float] = field(default_factory=dict)
 
     def rating(self, team: str) -> float:
@@ -39,9 +42,12 @@ class EloModel:
         winner_diff = elo_diff if home_won else -elo_diff
         mov_mult = ((mov + 3) ** 0.8) / (7.5 + 0.006 * winner_diff)
 
-        shift = self.k * mov_mult * ((1.0 if home_won else 0.0) - p_home)
+        surprise = (1.0 if home_won else 0.0) - p_home
+        shift = self.k * mov_mult * surprise
         self.ratings[home] = self.rating(home) + shift
         self.ratings[away] = self.rating(away) - shift
+        # Home teams beating expectations league-wide nudges the home edge up, and vice versa.
+        self.home_adv += self.home_k * mov_mult * surprise
         return p_home
 
     def new_season(self) -> None:

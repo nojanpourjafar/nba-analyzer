@@ -5,6 +5,7 @@ Usage:  python scripts/tune.py [--burn-in 1] [--test 2] [--metric log_loss]
 """
 
 import argparse
+import math
 
 import pandas as pd
 
@@ -24,12 +25,13 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.simulate:
-        games = simulate_seasons(seasons=8)
+        # Home edge drifts down, collapses for a fan-less season, then partly recovers.
+        games = simulate_seasons(seasons=8, home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2])
     else:
         games = pd.read_csv(args.games, parse_dates=["date"], dtype={"game_id": str})
 
-    n = len(next(iter(DEFAULT_GRID.values())))
-    print(f"Searching {n ** len(DEFAULT_GRID)} parameter combos ...")
+    combos = math.prod(len(v) for v in DEFAULT_GRID.values())
+    print(f"Searching {combos} parameter combos ...")
     res = tune(games, burn_in=args.burn_in, test=args.test, metric=args.metric)
 
     print(f"Train seasons: {res.train_seasons[0]} .. {res.train_seasons[-1]}")
@@ -38,7 +40,7 @@ def main() -> None:
     print(res.table.drop(columns="test").head(args.top).to_string(index=False, float_format="%.4f"))
 
     d = EloModel()
-    defaults = {"k": d.k, "home_adv": d.home_adv, "carryover": d.carryover}
+    defaults = {"k": d.k, "home_adv": d.home_adv, "carryover": d.carryover, "home_k": d.home_k}
     _, default_test = score(games, defaults, res.train_seasons, res.test_seasons, args.metric)
     best_test = res.test_score(res.best)
     print(f"\nHeld-out {args.metric}:")
