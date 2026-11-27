@@ -1,6 +1,7 @@
 import pandas as pd
+import pytest
 
-from nba_analyzer.features import add_rest_days
+from nba_analyzer.features import add_rest_days, add_travel, miles_between
 from nba_analyzer.simulate import simulate_seasons
 
 
@@ -57,3 +58,35 @@ def test_simulated_schedule_looks_like_the_nba():
     b2b_share = (g["home_b2b"].mean() + g["away_b2b"].mean()) / 2
     assert 0.12 < b2b_share < 0.22
     assert 150 < g["date"].dt.normalize().nunique() < 200  # roughly a real season's length
+
+
+def test_miles_between_known_cities():
+    from nba_analyzer.teams import ARENAS
+
+    assert miles_between(*ARENAS["LAL"], *ARENAS["BOS"]) == pytest.approx(2600, rel=0.02)
+    assert miles_between(*ARENAS["NYK"], *ARENAS["BKN"]) < 10
+    assert miles_between(*ARENAS["LAL"], *ARENAS["LAC"]) == 0
+
+
+def test_travel_follows_each_teams_trip():
+    g = add_travel(
+        _games(
+            [
+                ("1", "2023-24", "2024-01-01", "BOS", "LAL"),  # LAL flies LA -> Boston
+                ("2", "2023-24", "2024-01-03", "NYK", "LAL"),  # LAL Boston -> New York
+                ("3", "2023-24", "2024-01-05", "LAC", "LAL"),  # LAL back to LA; LAC at home
+                ("4", "2023-24", "2024-01-07", "BOS", "NYK"),  # NYK New York -> Boston
+            ]
+        )
+    )
+    assert g.loc[0, "home_travel"] == 0
+    assert g.loc[0, "away_travel"] == pytest.approx(2600, rel=0.02)
+    assert g.loc[1, "away_travel"] == pytest.approx(190, rel=0.05)
+    assert g.loc[2, "away_travel"] == pytest.approx(2450, rel=0.03)
+    assert g.loc[2, "home_travel"] == 0
+    assert g.loc[3, "away_travel"] == pytest.approx(190, rel=0.05)
+
+
+def test_travel_rejects_unknown_teams():
+    with pytest.raises(ValueError, match="SEA"):
+        add_travel(_games([("1", "2023-24", "2024-01-01", "SEA", "BOS")]))

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+
+from nba_analyzer.teams import ARENAS
 
 
 def add_rest_days(games: pd.DataFrame, cap: int = 4) -> pd.DataFrame:
@@ -30,4 +33,41 @@ def add_rest_days(games: pd.DataFrame, cap: int = 4) -> pd.DataFrame:
     out["away_rest"] = out["game_id"].map(rest["away"]).astype(int)
     out["home_b2b"] = (out["home_rest"] == 1).astype(int)
     out["away_b2b"] = (out["away_rest"] == 1).astype(int)
+    return out
+
+
+def miles_between(lat1, lon1, lat2, lon2):
+    """Great-circle distance in miles (haversine); works on scalars or arrays."""
+    lat1, lon1, lat2, lon2 = map(np.radians, (lat1, lon1, lat2, lon2))
+    a = np.sin((lat2 - lat1) / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2
+    return 3958.8 * 2 * np.arcsin(np.sqrt(a))
+
+
+def add_travel(games: pd.DataFrame) -> pd.DataFrame:
+    """Add home_travel / away_travel: miles from each team's previous game site to this one.
+
+    Every game is assumed to be at the home team's arena (rare neutral-site games, such as
+    international or NBA Cup games, are treated as home games). A team's first game of a
+    season counts as travelling from its own arena.
+    """
+    unknown = sorted(set(games["home"]) - set(ARENAS))
+    if unknown:
+        raise ValueError(f"No arena location for: {unknown}")
+    games = games.sort_values(["date", "game_id"]).reset_index(drop=True)
+    sides = pd.concat(
+        [
+            games[["game_id", "season", "date", "home"]].assign(team=games["home"], side="home"),
+            games[["game_id", "season", "date", "home"]].assign(team=games["away"], side="away"),
+        ]
+    ).sort_values(["date", "game_id"], kind="stable")
+    site = sides["home"]  # where this game is played
+    prev_site = sides.groupby(["season", "team"])["home"].shift().fillna(sides["team"])
+    lat, lon = site.map(lambda t: ARENAS[t][0]), site.map(lambda t: ARENAS[t][1])
+    plat, plon = prev_site.map(lambda t: ARENAS[t][0]), prev_site.map(lambda t: ARENAS[t][1])
+    sides["miles"] = miles_between(plat, plon, lat, lon).round()
+    miles = sides.pivot(index="game_id", columns="side", values="miles")
+
+    out = games.copy()
+    out["home_travel"] = out["game_id"].map(miles["home"]).astype(int)
+    out["away_travel"] = out["game_id"].map(miles["away"]).astype(int)
     return out
