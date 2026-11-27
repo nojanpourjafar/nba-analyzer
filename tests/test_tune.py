@@ -32,3 +32,12 @@ def test_tune_picks_by_train_and_beats_bad_params(games):
     assert res.test_score(res.best) < res.test_score({"k": 2, "home_adv": 0, "carryover": 0.75})
     with pytest.raises(KeyError):
         res.test_score({"k": 99, "home_adv": 0, "carryover": 0.75})
+
+
+def test_tune_prefers_learning_home_edge_when_it_shifts():
+    games = simulate_seasons(seasons=5, home_edge=[3, 3, 3, 0, 0], seed=3)
+    grid = {"k": [20], "home_adv": [80], "carryover": [0.75], "home_k": [0.0, 0.5]}
+    # Train on seasons 2-4 (season 4 has no home edge); test on season 5.
+    res = tune(games, grid=grid, burn_in=1, test=1)
+    assert res.best["home_k"] == 0.5
+    assert res.test_score(res.best) < res.test_score({**res.best, "home_k": 0.0})

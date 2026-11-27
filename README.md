@@ -18,7 +18,7 @@ ruff check . && ruff format --check .
 
 ```bash
 python scripts/fetch.py --start 2015 --end 2024   # pulls 2015-16 .. 2024-25 into data/games.csv
-python scripts/tune.py --burn-in 1 --test 2       # pick k / home_adv / carryover on early seasons
+python scripts/tune.py --burn-in 1 --test 2       # pick k / home_adv / carryover / home_k on early seasons
 python scripts/backtest.py --burn-in 1            # Elo backtest + calibration table
 python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on games with odds
 python scripts/backtest.py --home-k 0.5           # learn home advantage as seasons go (0 = fixed)
@@ -52,7 +52,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 | `nba_analyzer/evaluate.py` | Accuracy, Brier score, log loss, calibration table vs a naive baseline |
 | `nba_analyzer/market.py` | Betting odds to probabilities, with the bookmaker margin removed |
 | `nba_analyzer/teams.py` | Map team names from any odds source ("Golden State", "GS", ...) to abbreviations |
-| `nba_analyzer/tune.py` | Grid search over Elo parameters with a train/test split by season |
+| `nba_analyzer/tune.py` | Grid search over Elo parameters (including whether to learn home advantage), train/test split by season |
 | `nba_analyzer/simulate.py` | Simulated seasons with known team strengths, for tests and offline demos |
 | `scripts/` | Command-line entry points |
 | `tests/` | Offline tests, including an Elo check on simulated seasons |

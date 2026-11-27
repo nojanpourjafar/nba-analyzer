@@ -18,6 +18,7 @@ DEFAULT_GRID: dict[str, list[float]] = {
     "k": [10, 15, 20, 25, 30],
     "home_adv": [40, 60, 80, 100, 120],
     "carryover": [0.5, 0.65, 0.75, 0.85, 1.0],
+    "home_k": [0.0, 0.5, 1.0],  # 0 = fixed home advantage
 }
 
 
