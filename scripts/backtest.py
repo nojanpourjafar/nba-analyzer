@@ -10,7 +10,7 @@ import argparse
 import pandas as pd
 
 from nba_analyzer.elo import EloModel, run_elo
-from nba_analyzer.evaluate import calibration_table, compare_to_market, summarize
+from nba_analyzer.evaluate import calibration_table, compare_to_market, margin_errors, summarize
 from nba_analyzer.market import attach_market, load_odds
 
 
@@ -51,6 +51,9 @@ def main() -> None:
     print(f"Scored seasons: {seasons[args.burn_in]} .. {seasons[-1]}\n")
     for name, value in summarize(scored).items():
         print(f"  {name:<18} {value:.4f}" if isinstance(value, float) else f"  {name:<18} {value}")
+    print("\nPredicted margin, in points (lower is better):")
+    for name, value in margin_errors(scored).items():
+        print(f"  {name:<20} {value:.2f}")
     print("\nCalibration (predicted vs actual home-win rate):")
     print(calibration_table(scored["p_home"].to_numpy(), scored["home_win"].to_numpy()).to_string())
     if args.odds:

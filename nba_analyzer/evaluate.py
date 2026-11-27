@@ -71,3 +71,19 @@ def compare_to_market(results: pd.DataFrame) -> pd.DataFrame:
     table = pd.DataFrame(rows).T
     table["games"] = table["games"].astype(int)
     return table
+
+
+def margin_errors(results: pd.DataFrame) -> dict[str, float]:
+    """How far the predicted home margin (`spread`) misses the actual one, in points.
+
+    Compared with always predicting the average home margin. NBA margins are noisy: even
+    good spreads miss by about 10 points on average.
+    """
+    actual = (results["home_pts"] - results["away_pts"]).to_numpy(dtype=float)
+    pred = results["spread"].to_numpy(dtype=float)
+    base = np.full_like(actual, actual.mean())
+    return {
+        "margin_mae": float(np.mean(np.abs(pred - actual))),
+        "margin_rmse": float(np.sqrt(np.mean((pred - actual) ** 2))),
+        "baseline_margin_mae": float(np.mean(np.abs(base - actual))),
+    }

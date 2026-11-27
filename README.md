@@ -65,6 +65,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 - **Brier / log loss**: lower is better. Beating the baseline (always predicting the league home-win rate) is the first bar.
 - **Calibration**: in each bucket, `predicted` should be close to `actual`. If games you call 70% are won 60% of the time, the model is overconfident.
 - **Accuracy**: good NBA models land somewhere around the mid-60s percent. Much higher usually means data leakage.
+- **Predicted margin**: each game gets a `spread` (expected home margin, 28 Elo points = 1 point). NBA results are noisy, so even sharp betting lines miss by about 10 points on average; beat the "always predict the average margin" baseline first.
 
 ## Roadmap
 

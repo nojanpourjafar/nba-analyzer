@@ -21,6 +21,7 @@ import pandas as pd
 from nba_analyzer.features import add_rest_days, add_travel
 
 CONTEXT_COLUMNS = ["home_b2b", "away_b2b", "home_travel", "away_travel"]
+ELO_PER_POINT = 28.0  # FiveThirtyEight's conversion: 28 Elo points ~ 1 point of margin
 
 
 @dataclass
@@ -52,6 +53,10 @@ class EloModel:
         diff = self._diff(home, away, **ctx)
         return 1.0 / (1.0 + 10 ** (-diff / 400.0))
 
+    def spread(self, home: str, away: str, **ctx: float) -> float:
+        """Expected home margin in points (positive = home favoured)."""
+        return self._diff(home, away, **ctx) / ELO_PER_POINT
+
     def update(self, home: str, away: str, home_pts: int, away_pts: int, **ctx: float) -> float:
         """Apply one game result. Returns the PRE-game home win probability."""
         p_home = self.win_prob(home, away, **ctx)
@@ -76,7 +81,7 @@ class EloModel:
 
 
 def run_elo(games: pd.DataFrame, model: EloModel | None = None) -> tuple[pd.DataFrame, EloModel]:
-    """Walk games in date order, recording each game's pre-game probability.
+    """Walk games in date order, recording each game's pre-game probability and spread.
 
     Only information from before each game is used, so the output is safe to backtest on.
     Back-to-back flags (and travel miles, if travel_penalty is used) are added from the
@@ -90,13 +95,15 @@ def run_elo(games: pd.DataFrame, model: EloModel | None = None) -> tuple[pd.Data
         games = add_travel(games)
     ctx_cols = [c for c in CONTEXT_COLUMNS if c in games.columns]
     ctx_rows = games[ctx_cols].to_dict("records")
-    probs, current_season = [], None
+    probs, spreads, current_season = [], [], None
     for row, ctx in zip(games.itertuples(index=False), ctx_rows, strict=True):
         if current_season is not None and row.season != current_season:
             model.new_season()
         current_season = row.season
+        spreads.append(model.spread(row.home, row.away, **ctx))  # before the result is known
         probs.append(model.update(row.home, row.away, row.home_pts, row.away_pts, **ctx))
     out = games.copy()
     out["p_home"] = probs
+    out["spread"] = spreads
     out["home_win"] = (out["home_pts"] > out["away_pts"]).astype(int)
     return out, model
