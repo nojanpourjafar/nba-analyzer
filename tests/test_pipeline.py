@@ -1,15 +1,12 @@
 """Offline tests: reshaping logic plus an Elo sanity check on simulated seasons."""
-import sys
-from pathlib import Path
 
-import numpy as np
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from nba_analyzer.data import season_label, to_games  # noqa: E402
-from nba_analyzer.elo import EloModel, run_elo  # noqa: E402
-from nba_analyzer.evaluate import summarize  # noqa: E402
+from nba_analyzer.data import fetch_with_retry, season_label, to_games
+from nba_analyzer.elo import EloModel, run_elo
+from nba_analyzer.evaluate import summarize
+from nba_analyzer.simulate import simulate_seasons
 
 
 def test_to_games_pairs_home_and_away():
@@ -41,29 +38,62 @@ def test_elo_update_is_zero_sum_and_rewards_winner():
     assert abs(m.rating("A") + m.rating("B") - 2 * m.mean) < 1e-9
 
 
-def _simulate(seasons=4, teams=30, games_per_team=82, seed=0):
-    """Teams with fixed true strengths play random games; margin ~ N(strength diff + 3, 12)."""
-    rng = np.random.default_rng(seed)
-    names = [f"T{i:02d}" for i in range(teams)]
-    strength = dict(zip(names, rng.normal(0, 5, teams)))
-    rows, gid, day = [], 0, pd.Timestamp("2015-10-27")
-    for s in range(seasons):
-        for _ in range(teams * games_per_team // 2):
-            h, a = rng.choice(names, 2, replace=False)
-            margin = rng.normal(strength[h] - strength[a] + 3, 12)
-            margin = margin if abs(margin) >= 1 else 1.0
-            hp = 105 + max(margin, 0)
-            ap = 105 + max(-margin, 0)
-            rows.append((f"{gid:06d}", season_label(2015 + s), day, h, a, int(round(hp)), int(round(ap))))
-            gid += 1
-            day += pd.Timedelta(hours=8)
-    return pd.DataFrame(rows, columns=["game_id", "season", "date", "home", "away", "home_pts", "away_pts"])
-
-
 def test_elo_beats_baseline_on_simulated_data():
-    games = _simulate()
+    games = simulate_seasons()
     results, _ = run_elo(games)
     scored = results[results["season"] != results["season"].iloc[0]]
     s = summarize(scored)
     assert s["brier"] < s["baseline_brier"]
     assert s["accuracy"] > 0.6
+
+
+def test_to_games_drops_unplayed_rows():
+    raw = pd.DataFrame(
+        {
+            "GAME_ID": ["001", "001"],
+            "GAME_DATE": ["2024-01-02", "2024-01-02"],
+            "TEAM_ABBREVIATION": ["BOS", "NYK"],
+            "MATCHUP": ["BOS vs. NYK", "NYK @ BOS"],
+            "PTS": [None, None],
+        }
+    )
+    assert to_games(raw, "2023-24").empty
+
+
+def test_new_season_regresses_toward_mean():
+    m = EloModel(carryover=0.5)
+    m.ratings = {"A": 1605.0, "B": 1405.0}
+    m.new_season()
+    assert m.ratings == {"A": 1555.0, "B": 1455.0}
+
+
+def test_run_elo_uses_only_pregame_information():
+    games = simulate_seasons(seasons=1, teams=4, games_per_team=10)
+    full, _ = run_elo(games)
+    first_half, _ = run_elo(games.iloc[: len(games) // 2])
+    # Appending later games must not change earlier predictions.
+    assert full["p_home"].iloc[: len(first_half)].tolist() == first_half["p_home"].tolist()
+
+
+def test_fetch_with_retry_recovers_from_transient_errors(monkeypatch):
+    monkeypatch.setattr("nba_analyzer.data.time.sleep", lambda s: None)
+    calls = []
+
+    def flaky(season):
+        calls.append(season)
+        if len(calls) < 3:
+            raise TimeoutError("throttled")
+        return pd.DataFrame({"ok": [1]})
+
+    assert fetch_with_retry("2023-24", fetch=flaky)["ok"].tolist() == [1]
+    assert len(calls) == 3
+
+
+def test_fetch_with_retry_gives_up(monkeypatch):
+    monkeypatch.setattr("nba_analyzer.data.time.sleep", lambda s: None)
+
+    def broken(season):
+        raise TimeoutError("down")
+
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        fetch_with_retry("2023-24", retries=2, fetch=broken)

@@ -1,4 +1,5 @@
 """Score probabilistic predictions: accuracy, Brier score, log loss, calibration."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -39,7 +40,7 @@ def summarize(results: pd.DataFrame) -> dict[str, float]:
     y = results["home_win"].to_numpy()
     base = np.full_like(p, y.mean(), dtype=float)
     return {
-        "games": int(len(y)),
+        "games": len(y),
         "accuracy": accuracy(p, y),
         "brier": brier(p, y),
         "log_loss": log_loss(p, y),

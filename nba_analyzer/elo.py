@@ -5,6 +5,7 @@
   don't inflate ratings.
 - Between seasons, ratings regress partway back to the league mean.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
