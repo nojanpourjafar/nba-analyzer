@@ -127,3 +127,19 @@ def test_simulated_back_to_back_penalty_shows_up_in_results():
     tired_home = (games["home_b2b"] == 1) & (games["away_b2b"] == 0)
     rested_home = (games["home_b2b"] == 0) & (games["away_b2b"] == 1)
     assert home_wins[tired_home].mean() < home_wins[rested_home].mean() - 0.1
+
+
+def test_b2b_penalty_lowers_a_tired_teams_chances():
+    m = EloModel(b2b_penalty=50)
+    assert m.win_prob("A", "B", home_b2b=1) < m.win_prob("A", "B") < m.win_prob("A", "B", away_b2b=1)
+    assert m.win_prob("A", "B", home_b2b=1, away_b2b=1) == m.win_prob("A", "B")
+
+
+def test_elo_with_b2b_penalty_beats_ignoring_fatigue():
+    games = simulate_seasons(seasons=4, b2b_penalty=3, seed=6)  # ~85 Elo points
+    tired = add_rest_days(games)
+    tired = tired["home_b2b"] != tired["away_b2b"]
+    plain, _ = run_elo(games, EloModel(home_adv=80))
+    aware, _ = run_elo(games, EloModel(home_adv=80, b2b_penalty=80))
+    later = plain["season"] != "2015-16"
+    assert summarize(aware[later & tired])["log_loss"] < summarize(plain[later & tired])["log_loss"]

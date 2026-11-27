@@ -22,6 +22,7 @@ def main() -> None:
     ap.add_argument("--home-adv", type=float, default=100.0)
     ap.add_argument("--carryover", type=float, default=0.75)
     ap.add_argument("--home-k", type=float, default=0.0, help="learn home advantage at this rate (0 = fixed)")
+    ap.add_argument("--b2b-penalty", type=float, default=0.0, help="Elo points off on a back-to-back")
     ap.add_argument("--odds", help="odds CSV (date, home, away, home_ml, away_ml) to compare against")
     ap.add_argument("--out", default="data/predictions.csv")
     args = ap.parse_args()
@@ -31,7 +32,13 @@ def main() -> None:
     if not 0 <= args.burn_in < len(seasons):
         ap.error(f"--burn-in must be between 0 and {len(seasons) - 1} (data has {len(seasons)} seasons)")
 
-    model = EloModel(k=args.k, home_adv=args.home_adv, carryover=args.carryover, home_k=args.home_k)
+    model = EloModel(
+        k=args.k,
+        home_adv=args.home_adv,
+        carryover=args.carryover,
+        home_k=args.home_k,
+        b2b_penalty=args.b2b_penalty,
+    )
     results, model = run_elo(games, model)
     if args.odds:
         results = attach_market(results, load_odds(args.odds))

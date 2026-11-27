@@ -18,10 +18,11 @@ ruff check . && ruff format --check .
 
 ```bash
 python scripts/fetch.py --start 2015 --end 2024   # pulls 2015-16 .. 2024-25 into data/games.csv
-python scripts/tune.py --burn-in 1 --test 2       # pick k / home_adv / carryover / home_k on early seasons
+python scripts/tune.py --burn-in 1 --test 2       # pick all Elo settings on early seasons, test on later ones
 python scripts/backtest.py --burn-in 1            # Elo backtest + calibration table
 python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on games with odds
 python scripts/backtest.py --home-k 0.5           # learn home advantage as seasons go (0 = fixed)
+python scripts/backtest.py --b2b-penalty 30       # teams on a back-to-back count as 30 Elo weaker
 ```
 
 The odds file needs the columns `date, home, away, home_ml, away_ml`. The last two are American
@@ -48,7 +49,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 | File | Purpose |
 |---|---|
 | `nba_analyzer/data.py` | Fetch seasons, collapse two team rows into one row per game |
-| `nba_analyzer/elo.py` | Elo model: home-court advantage (fixed or learned), margin-of-victory multiplier, season regression |
+| `nba_analyzer/elo.py` | Elo model: home-court advantage (fixed or learned), back-to-back penalty, margin-of-victory multiplier, season regression |
 | `nba_analyzer/evaluate.py` | Accuracy, Brier score, log loss, calibration table vs a naive baseline |
 | `nba_analyzer/features.py` | Pre-game features: rest days and back-to-backs for each team |
 | `nba_analyzer/market.py` | Betting odds to probabilities, with the bookmaker margin removed |
@@ -68,7 +69,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 
 1. ~~Game results + Elo baseline~~
 2. ~~Tune `k` and `home_adv` on early seasons, test on later ones~~
-3. Add features: rest days / back-to-backs, travel, injuries
+3. Add features: ~~rest days / back-to-backs~~, travel, injuries
 4. Logistic regression / gradient boosting on Elo + features
 5. Pull historical market prices and compare model vs market (paper trading only)
 6. Dashboard

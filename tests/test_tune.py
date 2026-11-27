@@ -41,3 +41,11 @@ def test_tune_prefers_learning_home_edge_when_it_shifts():
     res = tune(games, grid=grid, burn_in=1, test=1)
     assert res.best["home_k"] == 0.5
     assert res.test_score(res.best) < res.test_score({**res.best, "home_k": 0.0})
+
+
+def test_tune_finds_a_back_to_back_penalty():
+    games = simulate_seasons(seasons=5, b2b_penalty=3, seed=4)
+    grid = {"k": [20], "home_adv": [80], "carryover": [0.75], "b2b_penalty": [0, 80]}
+    res = tune(games, grid=grid, burn_in=1, test=1)
+    assert res.best["b2b_penalty"] == 80
+    assert res.test_score(res.best) < res.test_score({**res.best, "b2b_penalty": 0})

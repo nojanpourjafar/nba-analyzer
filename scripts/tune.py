@@ -25,8 +25,11 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.simulate:
-        # Home edge drifts down, collapses for a fan-less season, then partly recovers.
-        games = simulate_seasons(seasons=8, home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2])
+        # Home edge drifts down, collapses for a fan-less season, then partly recovers;
+        # teams on a back-to-back play 2 points worse.
+        games = simulate_seasons(
+            seasons=8, home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2], b2b_penalty=2.0
+        )
     else:
         games = pd.read_csv(args.games, parse_dates=["date"], dtype={"game_id": str})
 
@@ -40,7 +43,7 @@ def main() -> None:
     print(res.table.drop(columns="test").head(args.top).to_string(index=False, float_format="%.4f"))
 
     d = EloModel()
-    defaults = {"k": d.k, "home_adv": d.home_adv, "carryover": d.carryover, "home_k": d.home_k}
+    defaults = {name: getattr(d, name) for name in DEFAULT_GRID}
     _, default_test = score(games, defaults, res.train_seasons, res.test_seasons, args.metric)
     best_test = res.test_score(res.best)
     print(f"\nHeld-out {args.metric}:")
