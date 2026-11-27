@@ -158,3 +158,24 @@ def test_elo_with_travel_penalty_beats_ignoring_travel():
     aware, _ = run_elo(games, EloModel(home_adv=80, travel_penalty=80))
     later = plain["season"] != "2015-16"
     assert summarize(aware[later])["log_loss"] < summarize(plain[later])["log_loss"]
+
+
+def test_spread_matches_rating_gap():
+    m = EloModel(home_adv=56)
+    m.ratings = {"A": 1561.0, "B": 1505.0}
+    assert m.spread("A", "B") == pytest.approx(4.0)  # (56 + 56) / 28
+    assert m.spread("B", "A") == pytest.approx(0.0)
+
+
+def test_predicted_spread_beats_average_margin_on_simulated_data():
+    from nba_analyzer.evaluate import margin_errors
+
+    games = simulate_seasons(seasons=3, seed=11)
+    results, _ = run_elo(games)
+    later = results[results["season"] != "2015-16"]
+    m = margin_errors(later)
+    assert m["margin_mae"] < m["baseline_margin_mae"]
+    assert 8 < m["margin_mae"] < 12  # the simulator's noise is 12 points
+    # Spread uses only pre-game information: adding later games can't change it.
+    first, _ = run_elo(games.iloc[:500])
+    assert results["spread"].iloc[:500].tolist() == first["spread"].tolist()
