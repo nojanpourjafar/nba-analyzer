@@ -6,6 +6,7 @@ import pytest
 from nba_analyzer.data import fetch_with_retry, season_label, to_games
 from nba_analyzer.elo import EloModel, run_elo
 from nba_analyzer.evaluate import summarize
+from nba_analyzer.features import add_rest_days
 from nba_analyzer.simulate import simulate_seasons
 
 
@@ -118,3 +119,11 @@ def test_learned_home_advantage_tracks_a_vanishing_home_edge():
 def test_simulate_needs_one_home_edge_per_season():
     with pytest.raises(ValueError):
         simulate_seasons(seasons=3, home_edge=[3, 0])
+
+
+def test_simulated_back_to_back_penalty_shows_up_in_results():
+    games = add_rest_days(simulate_seasons(seasons=4, b2b_penalty=4, seed=5))
+    home_wins = games["home_pts"] > games["away_pts"]
+    tired_home = (games["home_b2b"] == 1) & (games["away_b2b"] == 0)
+    rested_home = (games["home_b2b"] == 0) & (games["away_b2b"] == 1)
+    assert home_wins[tired_home].mean() < home_wins[rested_home].mean() - 0.1

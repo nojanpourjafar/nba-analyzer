@@ -1,6 +1,7 @@
 import pandas as pd
 
 from nba_analyzer.features import add_rest_days
+from nba_analyzer.simulate import simulate_seasons
 
 
 def _games(rows):
@@ -47,3 +48,12 @@ def test_rest_ignores_time_of_day_and_keeps_rows():
     g = add_rest_days(games)
     assert len(g) == 2
     assert g.loc[1, "home_b2b"] == 1
+
+
+def test_simulated_schedule_looks_like_the_nba():
+    g = add_rest_days(simulate_seasons(seasons=1, seed=1))
+    assert len(g) == 30 * 82 // 2
+    assert (g[["home_rest", "away_rest"]] >= 1).all().all()  # never two games in one day
+    b2b_share = (g["home_b2b"].mean() + g["away_b2b"].mean()) / 2
+    assert 0.12 < b2b_share < 0.22
+    assert 150 < g["date"].dt.normalize().nunique() < 200  # roughly a real season's length

@@ -17,6 +17,8 @@ def simulate_seasons(
     strength_sd: float = 5.0,
     drift_sd: float = 2.0,
     margin_sd: float = 12.0,
+    b2b_penalty: float = 0.0,
+    b2b_rate: float = 0.17,
     seed: int = 0,
     start_year: int = 2015,
 ) -> pd.DataFrame:
@@ -24,8 +26,13 @@ def simulate_seasons(
 
     Team strengths (in points) drift by N(0, drift_sd) between seasons, so carrying ratings
     over matters but isn't the whole story. `home_edge` may be a list with one value per
-    season, to simulate the home edge changing over time. Output has the same columns as
-    data/games.csv.
+    season, to simulate the home edge changing over time.
+
+    Schedule: one game per team per day at most. A team that played yesterday plays again
+    with probability `b2b_rate` (so about that share of games are back-to-backs, as in the
+    NBA); a rested team plays with probability 1 - b2b_rate, giving a game every other day
+    on average. A team on the second night of a back-to-back plays `b2b_penalty` points worse.
+    Output has the same columns as data/games.csv.
     """
     edges = list(home_edge) if isinstance(home_edge, (list, tuple)) else [home_edge] * seasons
     if len(edges) != seasons:
@@ -40,21 +47,30 @@ def simulate_seasons(
         if s:
             strength = strength + rng.normal(0, drift_sd, teams)
         day = pd.Timestamp(f"{start_year + s}-10-25")
-        for _ in range(teams * games_per_team // 2):
-            h, a = rng.choice(teams, 2, replace=False)
-            margin = rng.normal(strength[h] - strength[a] + edges[s], margin_sd)
-            margin = round(margin) or (1 if margin >= 0 else -1)  # no ties in the NBA
-            rows.append(
-                (
-                    f"{gid:08d}",
-                    season_label(start_year + s),
-                    day,
-                    names[h],
-                    names[a],
-                    105 + max(margin, 0),
-                    105 + max(-margin, 0),
+        played_yesterday = np.zeros(teams, dtype=bool)
+        target, played = teams * games_per_team // 2, 0
+        while played < target:
+            p_play = np.where(played_yesterday, b2b_rate, 1 - b2b_rate)
+            today = rng.permutation(np.flatnonzero(rng.uniform(size=teams) < p_play))
+            today = today[: min(len(today) // 2 * 2, 2 * (target - played))]
+            for h, a in today.reshape(-1, 2):
+                tired = b2b_penalty * (int(played_yesterday[h]) - int(played_yesterday[a]))
+                margin = rng.normal(strength[h] - strength[a] + edges[s] - tired, margin_sd)
+                margin = round(margin) or (1 if margin >= 0 else -1)  # no ties in the NBA
+                rows.append(
+                    (
+                        f"{gid:08d}",
+                        season_label(start_year + s),
+                        day,
+                        names[h],
+                        names[a],
+                        105 + max(margin, 0),
+                        105 + max(-margin, 0),
+                    )
                 )
-            )
-            gid += 1
-            day += pd.Timedelta(hours=4)
+                gid += 1
+            played += len(today) // 2
+            played_yesterday = np.zeros(teams, dtype=bool)
+            played_yesterday[today] = True
+            day += pd.Timedelta(days=1)
     return pd.DataFrame(rows, columns=GAME_COLUMNS)
