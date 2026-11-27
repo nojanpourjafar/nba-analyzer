@@ -50,6 +50,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 | `nba_analyzer/data.py` | Fetch seasons, collapse two team rows into one row per game |
 | `nba_analyzer/elo.py` | Elo model: home-court advantage (fixed or learned), margin-of-victory multiplier, season regression |
 | `nba_analyzer/evaluate.py` | Accuracy, Brier score, log loss, calibration table vs a naive baseline |
+| `nba_analyzer/features.py` | Pre-game features: rest days and back-to-backs for each team |
 | `nba_analyzer/market.py` | Betting odds to probabilities, with the bookmaker margin removed |
 | `nba_analyzer/teams.py` | Map team names from any odds source ("Golden State", "GS", ...) to abbreviations |
 | `nba_analyzer/tune.py` | Grid search over Elo parameters (including whether to learn home advantage), train/test split by season |
