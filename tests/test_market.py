@@ -1,7 +1,15 @@
 import numpy as np
+import pandas as pd
 import pytest
 
-from nba_analyzer.market import american_to_prob, decimal_to_prob, fair_probs, vig
+from nba_analyzer.market import (
+    american_to_prob,
+    attach_market,
+    decimal_to_prob,
+    fair_probs,
+    load_odds,
+    vig,
+)
 
 
 def test_american_to_prob():
@@ -37,3 +45,51 @@ def test_fair_probs_keep_the_favourite():
     h, a = fair_probs(american_to_prob(-250), american_to_prob(205))
     assert h + a == pytest.approx(1)
     assert 0.68 < h < 0.71
+
+
+def _games():
+    return pd.DataFrame(
+        {
+            "game_id": ["1", "2", "3"],
+            "date": pd.to_datetime(["2024-01-01", "2024-01-01", "2024-01-02"]),
+            "home": ["BOS", "LAL", "BOS"],
+            "away": ["NYK", "GSW", "MIA"],
+        }
+    )
+
+
+def test_attach_market_matches_on_date_and_teams(tmp_path):
+    path = tmp_path / "odds.csv"
+    path.write_text(
+        "date,home,away,home_ml,away_ml,extra\n"
+        "2024-01-01,BOS,NYK,-110,-110,x\n"
+        "2024-01-02,BOS,MIA,-250,205,x\n"
+        "2024-01-05,BOS,MIA,-250,205,x\n"  # no such game: ignored
+    )
+    out = attach_market(_games(), load_odds(path))
+    assert list(out["game_id"]) == ["1", "2", "3"]
+    assert out.loc[0, "p_market"] == pytest.approx(0.5)
+    assert np.isnan(out.loc[1, "p_market"])  # LAL-GSW has no odds
+    assert 0.68 < out.loc[2, "p_market"] < 0.71
+    assert out.loc[0, "vig"] == pytest.approx(0.0476, abs=1e-4)
+
+
+def test_load_odds_requires_columns(tmp_path):
+    path = tmp_path / "odds.csv"
+    path.write_text("date,home,away,home_ml\n2024-01-01,BOS,NYK,-110\n")
+    with pytest.raises(ValueError, match="away_ml"):
+        load_odds(path)
+
+
+def test_attach_market_rejects_duplicate_prices():
+    odds = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-01"]),
+            "home": ["BOS", "BOS"],
+            "away": ["NYK", "NYK"],
+            "home_ml": [-110, -120],
+            "away_ml": [-110, 100],
+        }
+    )
+    with pytest.raises(ValueError, match="share a date"):
+        attach_market(_games(), odds)

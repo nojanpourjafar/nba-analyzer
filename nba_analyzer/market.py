@@ -7,6 +7,7 @@ sides add up to more than 1. `fair_probs` removes it by scaling both sides propo
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 
 def american_to_prob(odds):
@@ -39,3 +40,34 @@ def fair_probs(p_home_raw, p_away_raw):
 def vig(p_home_raw, p_away_raw):
     """Bookmaker margin: how far the raw implied probabilities sum above 1."""
     return np.asarray(p_home_raw, dtype=float) + np.asarray(p_away_raw, dtype=float) - 1
+
+
+ODDS_COLUMNS = ["date", "home", "away", "home_ml", "away_ml"]
+
+
+def load_odds(path) -> pd.DataFrame:
+    """Read an odds CSV with columns date, home, away, home_ml, away_ml (American odds).
+
+    `home` / `away` must use the same team abbreviations as data/games.csv.
+    """
+    odds = pd.read_csv(path, parse_dates=["date"])
+    missing = set(ODDS_COLUMNS) - set(odds.columns)
+    if missing:
+        raise ValueError(f"Odds file is missing columns: {sorted(missing)}")
+    return odds[ODDS_COLUMNS]
+
+
+def attach_market(games: pd.DataFrame, odds: pd.DataFrame) -> pd.DataFrame:
+    """Add the market's margin-free home win probability to each game, matched on date + teams.
+
+    Adds `p_market` (NaN where no odds were found) and `vig`. Raises if the odds contain
+    duplicate rows for one game, since there'd be no way to tell which price to trust.
+    """
+    keys = ["date", "home", "away"]
+    dupes = odds.duplicated(keys, keep=False)
+    if dupes.any():
+        raise ValueError(f"{int(dupes.sum())} odds rows share a date + matchup with another row")
+    raw_h = american_to_prob(odds["home_ml"])
+    raw_a = american_to_prob(odds["away_ml"])
+    priced = odds[keys].assign(p_market=fair_probs(raw_h, raw_a)[0], vig=vig(raw_h, raw_a))
+    return games.merge(priced, on=keys, how="left", validate="one_to_one")
