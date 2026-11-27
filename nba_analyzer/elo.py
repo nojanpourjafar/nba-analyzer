@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from nba_analyzer.features import add_rest_days, add_travel
@@ -38,32 +39,38 @@ class EloModel:
     def rating(self, team: str) -> float:
         return self.ratings.get(team, self.mean)
 
-    def _diff(self, home: str, away: str, **ctx: float) -> float:
-        """Home rating edge for this game: ratings, home court, and fatigue from the schedule.
+    def _fatigue(self, home_b2b=0, away_b2b=0, home_travel=0, away_travel=0) -> float:
+        """Elo points the home side loses to schedule fatigue (negative if the away side does)."""
+        b2b = self.b2b_penalty * (home_b2b - away_b2b)
+        return b2b + self.travel_penalty * (home_travel - away_travel) / 1000
 
-        ctx may hold home_b2b / away_b2b (0 or 1) and home_travel / away_travel (miles).
-        """
-        fatigue = self.b2b_penalty * (ctx.get("home_b2b", 0) - ctx.get("away_b2b", 0))
-        extra_miles = ctx.get("home_travel", 0) - ctx.get("away_travel", 0)
-        fatigue += self.travel_penalty * extra_miles / 1000
+    def _diff(self, home: str, away: str, fatigue: float = 0.0) -> float:
+        """Home rating edge for this game: ratings, home court, and schedule fatigue."""
         return self.rating(home) + self.home_adv - self.rating(away) - fatigue
 
     def win_prob(self, home: str, away: str, **ctx: float) -> float:
-        """Probability the home team wins. See _diff for the optional schedule context."""
-        diff = self._diff(home, away, **ctx)
+        """Probability the home team wins.
+
+        ctx may hold home_b2b / away_b2b (0 or 1) and home_travel / away_travel (miles).
+        """
+        diff = self._diff(home, away, self._fatigue(**ctx))
         return 1.0 / (1.0 + 10 ** (-diff / 400.0))
 
     def spread(self, home: str, away: str, **ctx: float) -> float:
         """Expected home margin in points (positive = home favoured)."""
-        return self._diff(home, away, **ctx) / ELO_PER_POINT
+        return self._diff(home, away, self._fatigue(**ctx)) / ELO_PER_POINT
 
     def update(self, home: str, away: str, home_pts: int, away_pts: int, **ctx: float) -> float:
         """Apply one game result. Returns the PRE-game home win probability."""
-        p_home = self.win_prob(home, away, **ctx)
+        return self._step(home, away, home_pts, away_pts, self._fatigue(**ctx))[0]
+
+    def _step(self, home: str, away: str, home_pts: int, away_pts: int, fatigue: float):
+        """Apply one game result given its fatigue adjustment. Returns (pre-game p, diff)."""
+        elo_diff = self._diff(home, away, fatigue)
+        p_home = 1.0 / (1.0 + 10 ** (-elo_diff / 400.0))
         home_won = home_pts > away_pts
         mov = abs(home_pts - away_pts)
 
-        elo_diff = self._diff(home, away, **ctx)
         winner_diff = elo_diff if home_won else -elo_diff
         mov_mult = ((mov + 3) ** 0.8) / (7.5 + 0.006 * winner_diff)
 
@@ -73,7 +80,7 @@ class EloModel:
         self.ratings[away] = self.rating(away) - shift
         # Home teams beating expectations league-wide nudges the home edge up, and vice versa.
         self.home_adv += self.home_k * mov_mult * surprise
-        return p_home
+        return p_home, elo_diff
 
     def new_season(self) -> None:
         for team, r in self.ratings.items():
@@ -93,15 +100,19 @@ def run_elo(games: pd.DataFrame, model: EloModel | None = None) -> tuple[pd.Data
         games = add_rest_days(games)
     if model.travel_penalty and not {"home_travel", "away_travel"} <= set(games.columns):
         games = add_travel(games)
-    ctx_cols = [c for c in CONTEXT_COLUMNS if c in games.columns]
-    ctx_rows = games[ctx_cols].to_dict("records")
+    # Fatigue depends only on the schedule, so work it out for every game at once.
+    ctx = {c: games[c].to_numpy() for c in CONTEXT_COLUMNS if c in games.columns}
+    fatigue = model._fatigue(**ctx) if ctx else np.zeros(len(games))
+    fatigue = np.broadcast_to(fatigue, len(games)).tolist()
+    columns = [games[c].tolist() for c in ("season", "home", "away", "home_pts", "away_pts")]
     probs, spreads, current_season = [], [], None
-    for row, ctx in zip(games.itertuples(index=False), ctx_rows, strict=True):
-        if current_season is not None and row.season != current_season:
+    for season, home, away, home_pts, away_pts, tired in zip(*columns, fatigue, strict=True):
+        if current_season is not None and season != current_season:
             model.new_season()
-        current_season = row.season
-        spreads.append(model.spread(row.home, row.away, **ctx))  # before the result is known
-        probs.append(model.update(row.home, row.away, row.home_pts, row.away_pts, **ctx))
+        current_season = season
+        p_home, diff = model._step(home, away, home_pts, away_pts, tired)
+        probs.append(p_home)
+        spreads.append(diff / ELO_PER_POINT)  # from the pre-game rating gap
     out = games.copy()
     out["p_home"] = probs
     out["spread"] = spreads
