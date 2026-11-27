@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from nba_analyzer.data import GAME_COLUMNS, season_label
+from nba_analyzer.teams import ABBREVIATIONS
 
 
 def simulate_seasons(
@@ -24,8 +25,10 @@ def simulate_seasons(
     Team strengths (in points) drift by N(0, drift_sd) between seasons, so carrying ratings
     over matters but isn't the whole story. Output has the same columns as data/games.csv.
     """
+    if not 2 <= teams <= len(ABBREVIATIONS):
+        raise ValueError(f"teams must be between 2 and {len(ABBREVIATIONS)}")
     rng = np.random.default_rng(seed)
-    names = [f"T{i:02d}" for i in range(teams)]
+    names = ABBREVIATIONS[:teams]  # real abbreviations, so simulated data looks like the real thing
     strength = rng.normal(0, strength_sd, teams)
     rows, gid = [], 0
     for s in range(seasons):

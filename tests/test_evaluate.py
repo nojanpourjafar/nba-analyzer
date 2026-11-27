@@ -1,7 +1,8 @@
 import numpy as np
+import pandas as pd
 import pytest
 
-from nba_analyzer.evaluate import accuracy, brier, calibration_table, log_loss
+from nba_analyzer.evaluate import accuracy, brier, calibration_table, compare_to_market, log_loss
 
 
 def test_coin_flip_reference_scores():
@@ -30,3 +31,25 @@ def test_calibration_table_buckets():
     assert list(t.index) == ["0.0-0.1", "0.1-0.2", "0.9-1.0"]  # 1.0 lands in the top bucket
     assert t.loc["0.9-1.0", "games"] == 2
     assert t.loc["0.9-1.0", "actual"] == 1.0
+
+
+def test_compare_to_market_uses_only_priced_games():
+    rng = np.random.default_rng(0)
+    n = 4000
+    truth = rng.uniform(0.2, 0.8, n)
+    y = (rng.uniform(size=n) < truth).astype(int)
+    model = np.clip(truth + rng.normal(0, 0.15, n), 0.01, 0.99)  # noisy view of the truth
+    market = truth.copy()
+    market[:500] = np.nan  # some games have no odds
+    results = pd.DataFrame({"p_home": model, "p_market": market, "home_win": y})
+    t = compare_to_market(results)
+    assert list(t.index) == ["model", "market"]
+    assert t.loc["model", "games"] == t.loc["market", "games"] == n - 500
+    assert t.loc["market", "brier"] < t.loc["model", "brier"]
+    assert t.loc["market", "log_loss"] < t.loc["model", "log_loss"]
+
+
+def test_compare_to_market_needs_prices():
+    results = pd.DataFrame({"p_home": [0.6], "p_market": [np.nan], "home_win": [1]})
+    with pytest.raises(ValueError):
+        compare_to_market(results)
