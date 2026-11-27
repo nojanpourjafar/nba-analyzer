@@ -9,6 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from nba_analyzer.teams import normalize_teams
+
 
 def american_to_prob(odds):
     """Implied probability of American (moneyline) odds, vig included.
@@ -48,13 +50,17 @@ ODDS_COLUMNS = ["date", "home", "away", "home_ml", "away_ml"]
 def load_odds(path) -> pd.DataFrame:
     """Read an odds CSV with columns date, home, away, home_ml, away_ml (American odds).
 
-    `home` / `away` must use the same team abbreviations as data/games.csv.
+    Team names may be written any common way ("Golden State Warriors", "GS", ...); they are
+    converted to the abbreviations data/games.csv uses.
     """
     odds = pd.read_csv(path, parse_dates=["date"])
     missing = set(ODDS_COLUMNS) - set(odds.columns)
     if missing:
         raise ValueError(f"Odds file is missing columns: {sorted(missing)}")
-    return odds[ODDS_COLUMNS]
+    odds = odds[ODDS_COLUMNS].copy()
+    odds["home"] = normalize_teams(odds["home"])
+    odds["away"] = normalize_teams(odds["away"])
+    return odds
 
 
 def attach_market(games: pd.DataFrame, odds: pd.DataFrame) -> pd.DataFrame:

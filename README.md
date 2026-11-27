@@ -24,7 +24,8 @@ python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on 
 ```
 
 The odds file needs the columns `date, home, away, home_ml, away_ml`. The last two are American
-moneyline odds, and team abbreviations must match `data/games.csv`. The market's probabilities have
+moneyline odds, and team names can be written any common
+way ("Golden State Warriors", "GS", "GSW"). The market's probabilities have
 the bookmaker's margin removed before they're scored.
 
 No network? `python scripts/tune.py --simulate` runs the whole tuning loop on simulated seasons.
@@ -49,6 +50,7 @@ of both the defaults and the tuned parameters; if tuning doesn't beat the defaul
 | `nba_analyzer/elo.py` | Elo model: home-court advantage, margin-of-victory multiplier, season regression |
 | `nba_analyzer/evaluate.py` | Accuracy, Brier score, log loss, calibration table vs a naive baseline |
 | `nba_analyzer/market.py` | Betting odds to probabilities, with the bookmaker margin removed |
+| `nba_analyzer/teams.py` | Map team names from any odds source ("Golden State", "GS", ...) to abbreviations |
 | `nba_analyzer/tune.py` | Grid search over Elo parameters with a train/test split by season |
 | `nba_analyzer/simulate.py` | Simulated seasons with known team strengths, for tests and offline demos |
 | `scripts/` | Command-line entry points |

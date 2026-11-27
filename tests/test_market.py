@@ -62,8 +62,8 @@ def test_attach_market_matches_on_date_and_teams(tmp_path):
     path = tmp_path / "odds.csv"
     path.write_text(
         "date,home,away,home_ml,away_ml,extra\n"
-        "2024-01-01,BOS,NYK,-110,-110,x\n"
-        "2024-01-02,BOS,MIA,-250,205,x\n"
+        "2024-01-01,Boston Celtics,NY,-110,-110,x\n"
+        "2024-01-02,BOS,Heat,-250,205,x\n"
         "2024-01-05,BOS,MIA,-250,205,x\n"  # no such game: ignored
     )
     out = attach_market(_games(), load_odds(path))
