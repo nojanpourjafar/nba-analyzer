@@ -1,9 +1,13 @@
 """Fetch NBA game results with nba_api and reshape them to one row per game."""
+
 from __future__ import annotations
 
+import logging
 import time
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 GAME_COLUMNS = ["game_id", "season", "date", "home", "away", "home_pts", "away_pts"]
 
@@ -49,13 +53,31 @@ def to_games(raw: pd.DataFrame, season: str) -> pd.DataFrame:
     return games.sort_values(["date", "game_id"]).reset_index(drop=True)
 
 
-def fetch_seasons(seasons: list[str], pause: float = 1.5) -> pd.DataFrame:
+def fetch_with_retry(season: str, retries: int = 4, backoff: float = 5.0, fetch=None) -> pd.DataFrame:
+    """Fetch one season, retrying with exponential backoff (5s, 10s, 20s, ...).
+
+    stats.nba.com throttles and times out often; a short wait usually fixes it.
+    """
+    fetch = fetch or fetch_season_raw
+    for attempt in range(retries + 1):
+        try:
+            return fetch(season)
+        except Exception as exc:  # nba_api surfaces timeouts, connection and JSON errors
+            if attempt == retries:
+                raise RuntimeError(f"Failed to fetch {season} after {retries + 1} attempts") from exc
+            wait = backoff * 2**attempt
+            log.warning("Fetching %s failed (%s); retrying in %.0fs", season, exc, wait)
+            time.sleep(wait)
+    raise AssertionError("unreachable")
+
+
+def fetch_seasons(seasons: list[str], pause: float = 1.5, **retry_kwargs) -> pd.DataFrame:
     """Fetch several seasons, pausing between requests so stats.nba.com doesn't throttle us."""
     frames = []
     for i, season in enumerate(seasons):
         if i:
             time.sleep(pause)
-        frames.append(to_games(fetch_season_raw(season), season))
+        frames.append(to_games(fetch_with_retry(season, **retry_kwargs), season))
     return pd.concat(frames, ignore_index=True)
 
 
