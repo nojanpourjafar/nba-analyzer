@@ -84,3 +84,34 @@ def tune(
     table = pd.DataFrame(rows).sort_values("train", kind="stable").reset_index(drop=True)
     best = {n: table.loc[0, n].item() for n in names}
     return TuneResult(best=best, table=table, train_seasons=train, test_seasons=test_seasons)
+
+
+def walk_forward(
+    games: pd.DataFrame,
+    grid: dict[str, list[float]] | None = None,
+    burn_in: int = 1,
+    min_train: int = 2,
+    metric: str = "log_loss",
+) -> pd.DataFrame:
+    """Tune before every season using only earlier seasons, then score that season.
+
+    This is how the model would have been used live: for each target season (after the
+    burn-in and at least `min_train` training seasons), parameters are picked on the seasons
+    before it and judged on it alone. Returns one row per target season with the chosen
+    parameters, their score, and the default parameters' score on the same season.
+    """
+    seasons = sorted(games["season"].unique())
+    first = burn_in + min_train
+    if first >= len(seasons):
+        raise ValueError(f"Need more than burn_in + min_train = {first} seasons, data has {len(seasons)}")
+    defaults = EloModel()
+    rows = []
+    for target in seasons[first:]:
+        history = games[games["season"] <= target]
+        res = tune(history, grid=grid, burn_in=burn_in, test=1, metric=metric)
+        names = list(res.best)
+        default_params = {n: getattr(defaults, n) for n in names}
+        _, default_score = score(history, default_params, res.train_seasons, [target], metric)
+        tuned_score = res.test_score(res.best)
+        rows.append({"season": target, **res.best, "tuned": tuned_score, "default": default_score})
+    return pd.DataFrame(rows)

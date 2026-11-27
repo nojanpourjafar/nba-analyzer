@@ -82,3 +82,17 @@ def simulate_seasons(
             played_yesterday[today] = True
             day += pd.Timedelta(days=1)
     return pd.DataFrame(rows, columns=GAME_COLUMNS)
+
+
+def demo_seasons() -> pd.DataFrame:
+    """Eight simulated seasons with every effect the model knows about, for offline demos.
+
+    The home edge drifts down, collapses for a fan-less season, then partly recovers; teams
+    on a back-to-back play 2 points worse, and 1 point worse per 1,000 miles flown.
+    """
+    return simulate_seasons(
+        seasons=8,
+        home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2],
+        b2b_penalty=2.0,
+        travel_penalty=1.0,
+    )

@@ -19,6 +19,7 @@ ruff check . && ruff format --check .
 ```bash
 python scripts/fetch.py --start 2015 --end 2024   # pulls 2015-16 .. 2024-25 into data/games.csv
 python scripts/tune.py --burn-in 1 --test 2       # pick all Elo settings on early seasons, test on later ones
+python scripts/walk_forward.py                    # re-tune before every season on past seasons only, score it
 python scripts/backtest.py --burn-in 1            # Elo backtest + calibration table
 python scripts/backtest.py --odds data/odds.csv   # ... plus model vs market on games with odds
 python scripts/backtest.py --home-k 0.5           # learn home advantage as seasons go (0 = fixed)
@@ -44,6 +45,10 @@ chosen combo does). Ratings flow continuously through all of them, since that on
 but the parameters are chosen without looking at test scores. The script prints the held-out score
 of both the defaults and the tuned parameters; if tuning doesn't beat the defaults there, the
 "improvement" was noise.
+
+`walk_forward.py` goes one step further and repeats that for every season: tune on all seasons
+before it, then score it. That is exactly what you could have done live, so it is the number to
+trust. Try `python scripts/walk_forward.py --simulate` to see the format offline.
 
 ## What's here
 

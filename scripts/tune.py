@@ -10,7 +10,7 @@ import math
 import pandas as pd
 
 from nba_analyzer.elo import EloModel
-from nba_analyzer.simulate import simulate_seasons
+from nba_analyzer.simulate import demo_seasons
 from nba_analyzer.tune import DEFAULT_GRID, score, tune
 
 
@@ -25,14 +25,7 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.simulate:
-        # Home edge drifts down, collapses for a fan-less season, then partly recovers;
-        # teams on a back-to-back play 2 points worse, and 1 point worse per 1,000 miles flown.
-        games = simulate_seasons(
-            seasons=8,
-            home_edge=[3.5, 3.3, 3.1, 2.9, 2.7, 0.5, 2.0, 2.2],
-            b2b_penalty=2.0,
-            travel_penalty=1.0,
-        )
+        games = demo_seasons()
     else:
         games = pd.read_csv(args.games, parse_dates=["date"], dtype={"game_id": str})
 

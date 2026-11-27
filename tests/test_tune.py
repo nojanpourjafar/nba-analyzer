@@ -1,7 +1,7 @@
 import pytest
 
 from nba_analyzer.simulate import simulate_seasons
-from nba_analyzer.tune import split_seasons, tune
+from nba_analyzer.tune import split_seasons, tune, walk_forward
 
 
 @pytest.fixture(scope="module")
@@ -57,3 +57,20 @@ def test_tune_finds_a_travel_penalty():
     res = tune(games, grid=grid, burn_in=1, test=1)
     assert res.best["travel_penalty"] == 80
     assert res.test_score(res.best) < res.test_score({**res.best, "travel_penalty": 0})
+
+
+def test_walk_forward_tunes_each_season_on_its_past_only():
+    games = simulate_seasons(seasons=5, b2b_penalty=3, seed=12)
+    grid = {"k": [10, 20], "home_adv": [80], "carryover": [0.75], "b2b_penalty": [0, 80]}
+    table = walk_forward(games, grid=grid, burn_in=1, min_train=2)
+    assert table["season"].tolist() == ["2018-19", "2019-20"]
+    # The first target's choice must match tuning on its history alone (no peeking ahead).
+    first = tune(games[games["season"] <= "2018-19"], grid=grid, burn_in=1, test=1)
+    assert table.iloc[0][list(grid)].to_dict() == first.best
+    assert table.iloc[0]["tuned"] == first.test_score(first.best)
+    assert (table["b2b_penalty"] == 80).all()  # the fatigue effect is real here
+
+
+def test_walk_forward_needs_enough_seasons():
+    with pytest.raises(ValueError):
+        walk_forward(simulate_seasons(seasons=3), burn_in=1, min_train=2)
