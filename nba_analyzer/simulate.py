@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 
 from nba_analyzer.data import GAME_COLUMNS, season_label
-from nba_analyzer.teams import ABBREVIATIONS
+from nba_analyzer.features import miles_between
+from nba_analyzer.teams import ABBREVIATIONS, ARENAS
 
 
 def simulate_seasons(
@@ -18,6 +19,7 @@ def simulate_seasons(
     drift_sd: float = 2.0,
     margin_sd: float = 12.0,
     b2b_penalty: float = 0.0,
+    travel_penalty: float = 0.0,
     b2b_rate: float = 0.17,
     seed: int = 0,
     start_year: int = 2015,
@@ -31,7 +33,8 @@ def simulate_seasons(
     Schedule: one game per team per day at most. A team that played yesterday plays again
     with probability `b2b_rate` (so about that share of games are back-to-backs, as in the
     NBA); a rested team plays with probability 1 - b2b_rate, giving a game every other day
-    on average. A team on the second night of a back-to-back plays `b2b_penalty` points worse.
+    on average. A team on the second night of a back-to-back plays `b2b_penalty` points worse,
+    and each 1,000 miles a team flew since its last game costs it `travel_penalty` points.
     Output has the same columns as data/games.csv.
     """
     edges = list(home_edge) if isinstance(home_edge, (list, tuple)) else [home_edge] * seasons
@@ -48,6 +51,7 @@ def simulate_seasons(
             strength = strength + rng.normal(0, drift_sd, teams)
         day = pd.Timestamp(f"{start_year + s}-10-25")
         played_yesterday = np.zeros(teams, dtype=bool)
+        last_site = list(range(teams))  # each team starts the season at home
         target, played = teams * games_per_team // 2, 0
         while played < target:
             p_play = np.where(played_yesterday, b2b_rate, 1 - b2b_rate)
@@ -55,6 +59,10 @@ def simulate_seasons(
             today = today[: min(len(today) // 2 * 2, 2 * (target - played))]
             for h, a in today.reshape(-1, 2):
                 tired = b2b_penalty * (int(played_yesterday[h]) - int(played_yesterday[a]))
+                if travel_penalty:
+                    flown = [miles_between(*ARENAS[names[last_site[t]]], *ARENAS[names[h]]) for t in (h, a)]
+                    tired += travel_penalty * (flown[0] - flown[1]) / 1000
+                last_site[h] = last_site[a] = h
                 margin = rng.normal(strength[h] - strength[a] + edges[s] - tired, margin_sd)
                 margin = round(margin) or (1 if margin >= 0 else -1)  # no ties in the NBA
                 rows.append(

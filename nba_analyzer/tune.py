@@ -13,14 +13,15 @@ import pandas as pd
 
 from nba_analyzer.elo import EloModel, run_elo
 from nba_analyzer.evaluate import summarize
-from nba_analyzer.features import add_rest_days
+from nba_analyzer.features import add_rest_days, add_travel
 
 DEFAULT_GRID: dict[str, list[float]] = {
     "k": [10, 15, 20, 25],
-    "home_adv": [40, 60, 80, 100, 120],
+    "home_adv": [60, 80, 100, 120],
     "carryover": [0.65, 0.8, 1.0],
     "home_k": [0.0, 0.5, 1.0],  # 0 = fixed home advantage
-    "b2b_penalty": [0, 30, 60],  # Elo points; roughly 28 Elo per point of margin
+    "b2b_penalty": [0, 50],  # Elo points; roughly 28 Elo per point of margin
+    "travel_penalty": [0, 20],  # Elo points per 1,000 extra miles flown
 }
 
 
@@ -72,6 +73,8 @@ def tune(
     grid = grid or DEFAULT_GRID
     train, test_seasons = split_seasons(games, burn_in, test)
     games = add_rest_days(games)  # once, rather than inside every run
+    if any(grid.get("travel_penalty", [0])):
+        games = add_travel(games)
     names = list(grid)
     rows = []
     for values in itertools.product(*(grid[n] for n in names)):

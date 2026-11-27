@@ -8,6 +8,8 @@
   follow league-wide shifts such as the 2020 bubble or the long-run decline in home edge.
 - Optionally (b2b_penalty > 0), a team on the second night of a back-to-back is treated as
   that many Elo points weaker for the game. Ratings themselves are not changed by it.
+- Optionally (travel_penalty > 0), each 1,000 miles a team flew more than its opponent since
+  their previous games costs it that many Elo points for the game.
 """
 
 from __future__ import annotations
@@ -16,7 +18,9 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from nba_analyzer.features import add_rest_days
+from nba_analyzer.features import add_rest_days, add_travel
+
+CONTEXT_COLUMNS = ["home_b2b", "away_b2b", "home_travel", "away_travel"]
 
 
 @dataclass
@@ -27,30 +31,34 @@ class EloModel:
     carryover: float = 0.75  # fraction of a rating kept going into a new season
     home_k: float = 0.0  # learning rate for home_adv; 0 keeps it fixed
     b2b_penalty: float = 0.0  # Elo points subtracted from a team playing a back-to-back
+    travel_penalty: float = 0.0  # Elo points per 1,000 miles flown more than the opponent
     ratings: dict[str, float] = field(default_factory=dict)
 
     def rating(self, team: str) -> float:
         return self.ratings.get(team, self.mean)
 
-    def _diff(self, home: str, away: str, home_b2b: int, away_b2b: int) -> float:
-        """Home rating edge for this game, including home court and back-to-back fatigue."""
-        fatigue = self.b2b_penalty * (home_b2b - away_b2b)
+    def _diff(self, home: str, away: str, **ctx: float) -> float:
+        """Home rating edge for this game: ratings, home court, and fatigue from the schedule.
+
+        ctx may hold home_b2b / away_b2b (0 or 1) and home_travel / away_travel (miles).
+        """
+        fatigue = self.b2b_penalty * (ctx.get("home_b2b", 0) - ctx.get("away_b2b", 0))
+        extra_miles = ctx.get("home_travel", 0) - ctx.get("away_travel", 0)
+        fatigue += self.travel_penalty * extra_miles / 1000
         return self.rating(home) + self.home_adv - self.rating(away) - fatigue
 
-    def win_prob(self, home: str, away: str, home_b2b: int = 0, away_b2b: int = 0) -> float:
-        """Probability the home team wins."""
-        diff = self._diff(home, away, home_b2b, away_b2b)
+    def win_prob(self, home: str, away: str, **ctx: float) -> float:
+        """Probability the home team wins. See _diff for the optional schedule context."""
+        diff = self._diff(home, away, **ctx)
         return 1.0 / (1.0 + 10 ** (-diff / 400.0))
 
-    def update(
-        self, home: str, away: str, home_pts: int, away_pts: int, home_b2b: int = 0, away_b2b: int = 0
-    ) -> float:
+    def update(self, home: str, away: str, home_pts: int, away_pts: int, **ctx: float) -> float:
         """Apply one game result. Returns the PRE-game home win probability."""
-        p_home = self.win_prob(home, away, home_b2b, away_b2b)
+        p_home = self.win_prob(home, away, **ctx)
         home_won = home_pts > away_pts
         mov = abs(home_pts - away_pts)
 
-        elo_diff = self._diff(home, away, home_b2b, away_b2b)
+        elo_diff = self._diff(home, away, **ctx)
         winner_diff = elo_diff if home_won else -elo_diff
         mov_mult = ((mov + 3) ** 0.8) / (7.5 + 0.006 * winner_diff)
 
@@ -71,18 +79,23 @@ def run_elo(games: pd.DataFrame, model: EloModel | None = None) -> tuple[pd.Data
     """Walk games in date order, recording each game's pre-game probability.
 
     Only information from before each game is used, so the output is safe to backtest on.
-    Back-to-back flags are added from the schedule if the games don't have them yet.
+    Back-to-back flags (and travel miles, if travel_penalty is used) are added from the
+    schedule when the games don't have them yet.
     """
     model = model or EloModel()
     games = games.sort_values(["date", "game_id"]).reset_index(drop=True)
     if not {"home_b2b", "away_b2b"} <= set(games.columns):
         games = add_rest_days(games)
+    if model.travel_penalty and not {"home_travel", "away_travel"} <= set(games.columns):
+        games = add_travel(games)
+    ctx_cols = [c for c in CONTEXT_COLUMNS if c in games.columns]
+    ctx_rows = games[ctx_cols].to_dict("records")
     probs, current_season = [], None
-    for row in games.itertuples(index=False):
+    for row, ctx in zip(games.itertuples(index=False), ctx_rows, strict=True):
         if current_season is not None and row.season != current_season:
             model.new_season()
         current_season = row.season
-        probs.append(model.update(row.home, row.away, row.home_pts, row.away_pts, row.home_b2b, row.away_b2b))
+        probs.append(model.update(row.home, row.away, row.home_pts, row.away_pts, **ctx))
     out = games.copy()
     out["p_home"] = probs
     out["home_win"] = (out["home_pts"] > out["away_pts"]).astype(int)
