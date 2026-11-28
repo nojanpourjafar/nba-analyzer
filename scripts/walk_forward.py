@@ -28,7 +28,20 @@ def main() -> None:
     else:
         games = pd.read_csv(args.games, parse_dates=["date"], dtype={"game_id": str})
 
-    table = walk_forward(games, burn_in=args.burn_in, min_train=args.min_train, metric=args.metric)
+    seasons = sorted(games["season"].unique())
+    targets = max(len(seasons) - args.burn_in - args.min_train, 0)
+    print(f"Re-tuning before each of {targets} seasons; this can take a minute or two ...", flush=True)
+
+    def report(row):
+        gain = row["default"] - row["tuned"]
+        print(f"  {row['season']} done: tuned {row['tuned']:.4f} vs default {row['default']:.4f}", flush=True)
+        if gain < 0:
+            print("    (defaults did better this season)", flush=True)
+
+    table = walk_forward(
+        games, burn_in=args.burn_in, min_train=args.min_train, metric=args.metric, progress=report
+    )
+    print()
     table["gain"] = table["default"] - table["tuned"]
     print(f"Each season scored with parameters tuned only on the seasons before it ({args.metric}):\n")
     print(table.to_string(index=False, float_format=lambda v: f"{v:.4f}" if abs(v) < 10 else f"{v:g}"))

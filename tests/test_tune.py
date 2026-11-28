@@ -62,8 +62,10 @@ def test_tune_finds_a_travel_penalty():
 def test_walk_forward_tunes_each_season_on_its_past_only():
     games = simulate_seasons(seasons=5, b2b_penalty=3, seed=12)
     grid = {"k": [10, 20], "home_adv": [80], "carryover": [0.75], "b2b_penalty": [0, 80]}
-    table = walk_forward(games, grid=grid, burn_in=1, min_train=2)
+    seen = []
+    table = walk_forward(games, grid=grid, burn_in=1, min_train=2, progress=seen.append)
     assert table["season"].tolist() == ["2018-19", "2019-20"]
+    assert [r["season"] for r in seen] == ["2018-19", "2019-20"]  # reported as each finishes
     # The first target's choice must match tuning on its history alone (no peeking ahead).
     first = tune(games[games["season"] <= "2018-19"], grid=grid, burn_in=1, test=1)
     assert table.iloc[0][list(grid)].to_dict() == first.best

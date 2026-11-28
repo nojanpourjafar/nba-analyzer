@@ -92,6 +92,7 @@ def walk_forward(
     burn_in: int = 1,
     min_train: int = 2,
     metric: str = "log_loss",
+    progress=None,
 ) -> pd.DataFrame:
     """Tune before every season using only earlier seasons, then score that season.
 
@@ -99,6 +100,7 @@ def walk_forward(
     burn-in and at least `min_train` training seasons), parameters are picked on the seasons
     before it and judged on it alone. Returns one row per target season with the chosen
     parameters, their score, and the default parameters' score on the same season.
+    `progress`, if given, is called with each row as soon as its season is done.
     """
     seasons = sorted(games["season"].unique())
     first = burn_in + min_train
@@ -114,4 +116,6 @@ def walk_forward(
         _, default_score = score(history, default_params, res.train_seasons, [target], metric)
         tuned_score = res.test_score(res.best)
         rows.append({"season": target, **res.best, "tuned": tuned_score, "default": default_score})
+        if progress:
+            progress(rows[-1])
     return pd.DataFrame(rows)
