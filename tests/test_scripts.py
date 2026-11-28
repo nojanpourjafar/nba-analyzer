@@ -1,5 +1,6 @@
 """Smoke test: the backtest script runs end to end on simulated games plus odds."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,8 @@ def test_backtest_with_odds(tmp_path):
         capture_output=True,
         text=True,
         check=True,
+        # Find the package even if this Python doesn't have it installed (e.g. conda's base).
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
     ).stdout
     assert "Model vs market (30 of 60 scored games have odds)" in out
     assert "market" in out
